@@ -1,14 +1,15 @@
 package huobi
 
 import (
-	"github.com/nntaoli-project/GoEx"
+	"github.com/bxsmart/GoEx"
+	. "github.com/bxsmart/GoEx"
 	"github.com/stretchr/testify/assert"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"testing"
 	"time"
-	"log"
 )
 
 var httpProxyClient = &http.Client{
@@ -129,9 +130,9 @@ func TestHuobiPro_GetOrderHistorys(t *testing.T) {
 }
 
 func TestHuobiPro_GetDepthWithWs(t *testing.T) {
-	return
-	hbpro.GetDepthWithWs(goex.BTC_USDT, func(dep *goex.Depth) {
-		log.Println("%+v", *dep)
+	hbpro.GetDepthWithWs(goex.BTC_USDT, func(depth *Depth) {
+		//log.Printf("%+v", *depth)
+		log.Printf("%+v, %+v", depth.AskList[len(depth.AskList) - 1:], depth.BidList[0:1])
 	})
 	time.Sleep(time.Minute)
 }
@@ -139,15 +140,15 @@ func TestHuobiPro_GetDepthWithWs(t *testing.T) {
 func TestHuobiPro_GetTickerWithWs(t *testing.T) {
 	return
 	hbpro.GetTickerWithWs(goex.BTC_USDT, func(ticker *goex.Ticker) {
-		log.Println("%+v", *ticker)
+		log.Printf("%+v", *ticker)
 	})
 	time.Sleep(time.Minute)
 }
 
 func TestHuobiPro_GetKLineWithWs(t *testing.T) {
 	return
-	hbpro.GetKLineWithWs(goex.BTC_USDT, goex.KLINE_PERIOD_60MIN, func(kline *goex.Kline) {
-		log.Println("%+v", *kline)
+	hbpro.GetKLineWithWs(goex.BTC_USDT, goex.KLINE_PERIOD_60MIN, func(kline *Kline) {
+		log.Printf("%+v", *kline)
 	})
 	time.Sleep(time.Minute)
 }

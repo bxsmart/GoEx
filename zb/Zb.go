@@ -1,15 +1,21 @@
 package zb
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	. "github.com/nntaoli-project/GoEx"
+	. "github.com/bxsmart/GoEx"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -28,14 +34,19 @@ const (
 	CANCELWITHDRAW_API        = "cancelWithdraw"
 )
 
+var onceWsConn sync.Once
+
 type Zb struct {
-	httpClient *http.Client
-	accessKey,
-	secretKey string
+	httpClient           *http.Client
+	accessKey, secretKey string
+	ws                   *WsConn
+	wsDepthHandleMap     map[string]func(*Depth)
 }
 
 func New(httpClient *http.Client, accessKey, secretKey string) *Zb {
-	return &Zb{httpClient, accessKey, secretKey}
+	zb := Zb{httpClient: httpClient, accessKey: accessKey, secretKey: secretKey}
+	zb.wsDepthHandleMap = make(map[string]func(*Depth))
+	return &zb
 }
 
 func (zb *Zb) GetExchangeName() string {
@@ -75,7 +86,7 @@ func (zb *Zb) GetDepth(size int, currency CurrencyPair) (*Depth, error) {
 
 	asks, isok1 := resp["asks"].([]interface{})
 	bids, isok2 := resp["bids"].([]interface{})
-	
+
 	if isok2 != true || isok1 != true {
 		return nil, errors.New("no depth data!")
 	}
@@ -447,4 +458,149 @@ func (zb *Zb) MarketBuy(amount, price string, currency CurrencyPair) (*Order, er
 
 func (zb *Zb) MarketSell(amount, price string, currency CurrencyPair) (*Order, error) {
 	panic("unsupport the market order")
+}
+
+/**
+[{
+		"dataType": "dishLength",
+		"rate": "24790.55",
+		"currentIsBuy": false,
+		"dayNumber": 143312714.22,
+		"lastTime": 1547889691047,
+		"transction": [],
+		"currentPrice": 0.00003279,
+		"high": 0.00003346,
+		"totalBtc": 143312714.22,
+		"low": 0.00003247,
+		"channel": "dish_length_5_zbbtcdefault",
+		"listDown": [[0.00003274, 971.95], [0.00003266, 6798.66], [0.00003258, 3000.00], [0.00003257, 2482.75], [0.00003255, 5052.57]],
+		"listUp": [[0.00003281, 622.12], [0.00003282, 661.56], [0.00003284, 50.00], [0.0000329, 6798.66], [0.000033, 5000.00]]
+	}
+]
+
+@description
+Decoder step
+1. decode by base64
+2. gzip decode
+3. json parser
+*/
+func (zb *Zb) GetDepthWithWs(pair CurrencyPair, handle func(depth *Depth)) error {
+	zb.createWsConn()
+	sub := fmt.Sprintf("dish_length_5_%sdefault", strings.ToLower(pair.ToSymbol("")))
+	//sub := fmt.Sprintf("dish_depth_00001_%sdefault", strings.ToLower(pair.ToSymbol("")))
+
+	zb.wsDepthHandleMap[sub] = handle
+	return zb.ws.Subscribe(map[string]interface{}{
+		"binary": "true",
+		"channel": sub,
+		"event": "addChannel",
+		"isZip": "true",
+	})
+}
+
+func (zb *Zb) getPairFromChannel(ch string) CurrencyPair {
+	s := strings.Split(ch[:len(ch) - len("default")], "_")
+	var currA, currB string
+	if strings.HasSuffix(s[3], "usdt") {
+		currB = "usdt"
+	} else if strings.HasSuffix(s[3], "pax") {
+		currB = "pax"
+	} else if strings.HasSuffix(s[3], "btc") {
+		currB = "btc"
+	} else if strings.HasSuffix(s[3], "eth") {
+		currB = "eth"
+	} else if strings.HasSuffix(s[3], "qc") {
+		currB = "qc"
+	}
+
+	currA = strings.TrimSuffix(s[3], currB)
+
+	a := NewCurrency(currA, "")
+	b := NewCurrency(currB, "")
+	pair := NewCurrencyPair(a, b)
+	return pair
+}
+
+
+func (zb *Zb) parseDepthData(tick map[string]interface{}) *Depth {
+	bids, _ := tick["listUp"].([]interface{})
+	asks, _ := tick["listDown"].([]interface{})
+
+	depth := new(Depth)
+	for _, r := range asks {
+		var dr DepthRecord
+		rr := r.([]interface{})
+		dr.Price = ToFloat64(rr[0])
+		dr.Amount = ToFloat64(rr[1])
+		depth.AskList = append(depth.AskList, dr)
+	}
+
+	for _, r := range bids {
+		var dr DepthRecord
+		rr := r.([]interface{})
+		dr.Price = ToFloat64(rr[0])
+		dr.Amount = ToFloat64(rr[1])
+		depth.BidList = append(depth.BidList, dr)
+	}
+
+	sort.Sort(sort.Reverse(depth.AskList))
+
+	return depth
+}
+
+
+func (zb *Zb) createWsConn() {
+	onceWsConn.Do(func() {
+		zb.ws = NewWsConn("wss://kline.zb.cn/websocket")
+		zb.ws.Heartbeat(func() interface{} {
+			return map[string]interface{}{"ping": time.Now().Unix()}
+		}, 5*time.Second)
+
+		zb.ws.ReConnect()
+		zb.ws.ReceiveMessage(func(msg []byte) {
+			resp := string(msg)
+			decodeBytes, err := base64.StdEncoding.DecodeString(resp)
+			if err != nil {
+				log.Fatalln(err)
+			}
+
+			gzipreader, err := gzip.NewReader(bytes.NewReader(decodeBytes))
+			data, _ := ioutil.ReadAll(gzipreader)
+			var dataArr []map[string]interface{}
+			data = data[1 : len(data)-1]
+			err = json.Unmarshal(data, &dataArr)
+			if err != nil || len(dataArr)<1 {
+				log.Println("json unmarshal error for ", string(data))
+				return
+			}
+
+			datamap := dataArr[0]
+			if datamap["ping"] != nil {
+				zb.ws.UpdateActivedTime()
+				zb.ws.SendWriteJSON(map[string]interface{}{
+					"pong": datamap["ping"]}) // 回应心跳
+				return
+			}
+
+			if datamap["pong"] != nil { //
+				zb.ws.UpdateActivedTime()
+				return
+			}
+
+			if datamap["id"] != nil { //忽略订阅成功的回执消息
+				log.Println(string(data))
+				return
+			}
+
+			ch := datamap["channel"].(string)
+			pair := zb.getPairFromChannel(ch)
+			if zb.wsDepthHandleMap[ch] != nil {
+				depth := zb.parseDepthData(datamap)
+				depth.Pair = pair
+				(zb.wsDepthHandleMap[ch])(depth)
+				return
+			}
+		})
+	})
+
 }

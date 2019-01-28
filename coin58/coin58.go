@@ -4,7 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	. "github.com/nntaoli-project/GoEx"
+	. "github.com/bxsmart/GoEx"
 	"net/http"
 	"net/url"
 	"sort"

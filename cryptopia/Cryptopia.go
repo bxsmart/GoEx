@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	. "github.com/nntaoli-project/GoEx"
+	. "github.com/bxsmart/GoEx"
 
 	"net/http"
 	"net/http/httputil"

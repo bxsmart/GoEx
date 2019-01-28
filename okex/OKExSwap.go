@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
-	. "github.com/nntaoli-project/GoEx"
+	. "github.com/bxsmart/GoEx"
 	"github.com/pkg/errors"
 	"internal/log"
 	"strings"

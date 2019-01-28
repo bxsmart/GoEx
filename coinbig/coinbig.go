@@ -1,7 +1,7 @@
 package coinbig
 
 import (
-	. "github.com/nntaoli-project/GoEx"
+	. "github.com/bxsmart/GoEx"
 	"net/http"
 	"net/url"
 

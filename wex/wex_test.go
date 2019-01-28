@@ -3,7 +3,7 @@ package wex
 import (
 	"net/http"
 	"testing"
-	"github.com/nntaoli-project/GoEx"
+	"github.com/bxsmart/GoEx"
 )
 
 var wex = New(http.DefaultClient, "", "")

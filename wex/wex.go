@@ -2,7 +2,7 @@ package wex
 
 import (
 	"errors"
-	. "github.com/nntaoli-project/GoEx"
+	. "github.com/bxsmart/GoEx"
 	"log"
 	"net/http"
 	"strings"
