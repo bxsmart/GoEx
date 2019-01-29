@@ -543,7 +543,7 @@ func (zb *Zb) parseDepthData(tick map[string]interface{}) *Depth {
 		depth.BidList = append(depth.BidList, dr)
 	}
 
-	sort.Sort(sort.Reverse(depth.AskList))
+	sort.Sort(sort.Reverse(depth.BidList))
 
 	return depth
 }
