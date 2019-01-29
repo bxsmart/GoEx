@@ -522,8 +522,9 @@ func (zb *Zb) getPairFromChannel(ch string) CurrencyPair {
 
 
 func (zb *Zb) parseDepthData(tick map[string]interface{}) *Depth {
-	bids, _ := tick["listUp"].([]interface{})
-	asks, _ := tick["listDown"].([]interface{})
+	// bid 买, asks卖
+	asks, _ := tick["listUp"].([]interface{})
+	bids, _ := tick["listDown"].([]interface{})
 
 	depth := new(Depth)
 	for _, r := range asks {

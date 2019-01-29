@@ -674,6 +674,7 @@ func (hbpro *HuoBiPro) parseTickerData(tick map[string]interface{}) *Ticker {
 }
 
 func (hbpro *HuoBiPro) parseDepthData(tick map[string]interface{}) *Depth {
+	// bid 买, asks卖
 	bids, _ := tick["bids"].([]interface{})
 	asks, _ := tick["asks"].([]interface{})
 
