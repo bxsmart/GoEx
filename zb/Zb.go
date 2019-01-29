@@ -487,7 +487,6 @@ Decoder step
 func (zb *Zb) GetDepthWithWs(pair CurrencyPair, handle func(depth *Depth)) error {
 	zb.createWsConn()
 	sub := fmt.Sprintf("dish_length_5_%sdefault", strings.ToLower(pair.ToSymbol("")))
-	//sub := fmt.Sprintf("dish_depth_00001_%sdefault", strings.ToLower(pair.ToSymbol("")))
 
 	zb.wsDepthHandleMap[sub] = handle
 	return zb.ws.Subscribe(map[string]interface{}{
@@ -559,13 +558,20 @@ func (zb *Zb) createWsConn() {
 		zb.ws.ReConnect()
 		zb.ws.ReceiveMessage(func(msg []byte) {
 			resp := string(msg)
-			decodeBytes, err := base64.StdEncoding.DecodeString(resp)
-			if err != nil {
-				log.Fatalln(err)
+			var dataMap map[string]interface{}
+			err := json.Unmarshal(msg, &dataMap)
+			if err == nil && dataMap["code"].(float64) == 1008 {
+				log.Println(resp)
+				return
 			}
 
-			gzipreader, err := gzip.NewReader(bytes.NewReader(decodeBytes))
-			data, _ := ioutil.ReadAll(gzipreader)
+			decodeBytes, err := base64.StdEncoding.DecodeString(resp)
+			if err != nil {
+				log.Println(err)
+			}
+
+			gzipReader, err := gzip.NewReader(bytes.NewReader(decodeBytes))
+			data, _ := ioutil.ReadAll(gzipReader)
 			var dataArr []map[string]interface{}
 			data = data[1 : len(data)-1]
 			err = json.Unmarshal(data, &dataArr)
@@ -577,8 +583,7 @@ func (zb *Zb) createWsConn() {
 			datamap := dataArr[0]
 			if datamap["ping"] != nil {
 				zb.ws.UpdateActivedTime()
-				zb.ws.SendWriteJSON(map[string]interface{}{
-					"pong": datamap["ping"]}) // 回应心跳
+				zb.ws.SendWriteJSON(map[string]interface{}{"pong": datamap["ping"]}) // 回应心跳
 				return
 			}
 
